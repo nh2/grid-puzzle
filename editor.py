@@ -165,16 +165,20 @@ class GridWindow(Gtk.Window):
         # Save button
         save_button = Gtk.Button(label="Save")
         def on_save_click(button):
-            bools = []
-            for lane in range(N):
-                bools_row = []
-                for offset in range(N+1):
-                    bools_row.append(gaps_horiz[(lane, offset)])
-                    print(f"gaps_horiz[({lane}, {offset})] = {gaps_horiz[(lane, offset)]}")
-                bools.append(bools_row)
-            print(bools)
+            def gaps_to_bool_array(gaps_state_dict):
+                bools = []
+                for lane in range(N):
+                    bools_row = []
+                    for offset in range(N+1):
+                        bools_row.append(gaps_state_dict[(lane, offset)])
+                    bools.append(bools_row)
+                return bools
+            state = {
+                'horiz': gaps_to_bool_array(gaps_horiz),
+                'vert': gaps_to_bool_array(gaps_vert),
+            }
             with open(save_file_path, 'w') as f:
-                json.dump(bools, f)
+                json.dump(state, f)
             print(f"Saved to {save_file_path}")
 
         save_button.connect("clicked", on_save_click)
@@ -184,13 +188,15 @@ class GridWindow(Gtk.Window):
         def on_load_click(button):
             print(f"Loading {save_file_path}")
             with open(save_file_path, 'r') as f:
-                bools = json.load(f)
-            for lane, cols in enumerate(bools):
-                for offset, b in enumerate(cols):
-                    gaps_horiz[(lane, offset)] = b
-                    button = buttons_gaps_horiz[(lane, offset)]
-                    update_button_style(button, gap_active=b)
-                    print(lane, offset, b)
+                state = json.load(f)
+            for key, gaps_state_dict in [('horiz', gaps_horiz), ('vert', gaps_vert)]:
+                bools = state[key]
+                for lane, cols in enumerate(bools):
+                    for offset, b in enumerate(cols):
+                        direction = {'horiz': 'h', 'vert': 'v'}[key]
+                        gap = Gap(direction=direction, lane=lane, offset=offset)
+                        set_gap(gap, gap_active=b)
+                        print(f"Loading {gap=} {b=}")
 
         load_button.connect("clicked", on_load_click)
         vbox.add(load_button)
