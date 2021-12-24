@@ -182,8 +182,8 @@ class GridWindow(Gtk.Window):
                     bools.append(bools_row)
                 return bools
             state = {
-                'horiz': gaps_to_bool_array(gaps_horiz, num_lanes=SIZE_Y, num_offsets=SIZE_X),
-                'vert': gaps_to_bool_array(gaps_vert, num_lanes=SIZE_X, num_offsets=SIZE_Y),
+                'horiz': gaps_to_bool_array(gaps_horiz, num_lanes=SIZE_Y, num_offsets=SIZE_X+1),
+                'vert': gaps_to_bool_array(gaps_vert, num_lanes=SIZE_X, num_offsets=SIZE_Y+1),
             }
             with open(save_file_path, 'w') as f:
                 json.dump(state, f, sort_keys=True, indent=2)
