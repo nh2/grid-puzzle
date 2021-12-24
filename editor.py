@@ -35,26 +35,30 @@ class GridWindow(Gtk.Window):
             font-size: 1px;
             padding: 0px;
             border: 0px;
+            border-radius: 0;
         }
         button.gap {
             background-color: black;
-            min-width: 6px;
-            min-height: 6px;
+            min-width: 5px;
+            min-height: 5px;
         }
         button.gap.disabled {
             background-color: white;
         }
         button.tile {
             background-color: white;
-            min-width: 18px;
-            min-height: 18px;
+            min-width: 15px;
+            min-height: 15px;
         }
         """
         provider.load_from_data(css)
 
+        # Number of tiles
+        SIZE_X = 56
+        SIZE_Y = 57
+        # SIZE_X = 3
+        # SIZE_Y = 4
 
-        # N = 46
-        N = 10
         gaps_vert = {}  # (lane, offset) -> bool
         gaps_horiz = {}  # (lane, offset) -> bool
 
@@ -120,30 +124,21 @@ class GridWindow(Gtk.Window):
                 key_name = Gdk.keyval_name(event.keyval)
                 gap = input_state.gap
                 print(f"keypress on {gap.direction=} {gap.lane=} {gap.offset=} {key_name=}")
+                size = { 'h': SIZE_X, 'v': SIZE_Y }[gap.direction]
                 if key_name in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
                     n = int(key_name)
                     print(f"Ungapping next {n-1} fields, inserting gap after")
                     for i in range(n-1):
-                        target_gap = Gap(direction=gap.direction, lane=gap.lane, offset=min(N-1, gap.offset + 1 + i))
+                        target_gap = Gap(direction=gap.direction, lane=gap.lane, offset=min(size-1, gap.offset + 1 + i))
                         set_gap(target_gap, gap_active=False)
-                    end_gap = Gap(direction=gap.direction, lane=gap.lane, offset=min(N-1, gap.offset + n))
+                    end_gap = Gap(direction=gap.direction, lane=gap.lane, offset=min(size-1, gap.offset + n))
                     set_gap(end_gap, gap_active=True)
                     set_input_gap(end_gap)
             return on_keypress
 
-        for lane in range(N):
-            for offset in range(N+1):
-
-                # Vertical gap
-                left = lane * 2 + 1
-                top = offset * 2
-                b = add_button(3*top, 3*left, "", "gap", width=3)
-                buttons_gaps_vert[(lane, offset)] = b
-                gaps_vert[(lane, offset)] = True
-                b.connect("clicked", make_gap_clicked_function(Gap("v", lane, offset)))
-                b.connect("key-press-event", make_keypress_function())
-
-                # Horizontal gap
+        # Horizontal gaps
+        for lane in range(SIZE_Y):
+            for offset in range(SIZE_X + 1):
                 left = offset * 2
                 top = lane * 2 + 1
                 b = add_button(3*top, 3*left, "", "gap", height=3)
@@ -152,11 +147,24 @@ class GridWindow(Gtk.Window):
                 b.connect("clicked", make_gap_clicked_function(Gap("h", lane, offset)))
                 b.connect("key-press-event", make_keypress_function())
 
-                # Tile
-                if offset < N:
-                    left = lane * 2 + 1
-                    top = offset * 2 + 1
-                    add_button(3*top, 3*left, "", "tile", width=3, height=3)
+        # Tiles
+        for x in range(SIZE_X):
+            for y in range(SIZE_Y):
+                left = x * 2 + 1
+                top = y * 2 + 1
+                add_button(3*top, 3*left, "", "tile", width=3, height=3)
+
+        # Vertical gaps
+        for lane in range(SIZE_X):
+            for offset in range(SIZE_Y + 1):
+                left = lane * 2 + 1
+                top = offset * 2
+                b = add_button(3*top, 3*left, "", "gap", width=3)
+                buttons_gaps_vert[(lane, offset)] = b
+                gaps_vert[(lane, offset)] = True
+                b.connect("clicked", make_gap_clicked_function(Gap("v", lane, offset)))
+                b.connect("key-press-event", make_keypress_function())
+
 
         vbox.add(grid)
 
@@ -165,20 +173,20 @@ class GridWindow(Gtk.Window):
         # Save button
         save_button = Gtk.Button(label="Save")
         def on_save_click(button):
-            def gaps_to_bool_array(gaps_state_dict):
+            def gaps_to_bool_array(gaps_state_dict, num_lanes, num_offsets):
                 bools = []
-                for lane in range(N):
+                for lane in range(num_lanes):
                     bools_row = []
-                    for offset in range(N+1):
+                    for offset in range(num_offsets):
                         bools_row.append(gaps_state_dict[(lane, offset)])
                     bools.append(bools_row)
                 return bools
             state = {
-                'horiz': gaps_to_bool_array(gaps_horiz),
-                'vert': gaps_to_bool_array(gaps_vert),
+                'horiz': gaps_to_bool_array(gaps_horiz, num_lanes=SIZE_Y, num_offsets=SIZE_X),
+                'vert': gaps_to_bool_array(gaps_vert, num_lanes=SIZE_X, num_offsets=SIZE_Y),
             }
             with open(save_file_path, 'w') as f:
-                json.dump(state, f)
+                json.dump(state, f, sort_keys=True, indent=2)
             print(f"Saved to {save_file_path}")
 
         save_button.connect("clicked", on_save_click)

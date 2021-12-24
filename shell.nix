@@ -10,7 +10,9 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     gtk3
     (python3.withPackages (ps: with ps; [
+      numpy
       pygobject3
+      pillow
     ]))
   ];
 }
