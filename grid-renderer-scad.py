@@ -18,21 +18,28 @@ def load_grid():
 
 def main():
 
-    tile_height_mm = 5
-    tile_side_mm = 5
-    gap_mm = 0.8
+    tile_height_mm = 6.4
+    tile_side_mm = 6.4
+    gap_mm = 0.6
+    frame_margin_mm = 5
+
+    eps = 0.01  # OpenGL render tolerance for OpenSCAD visualisation
+
     tilegap_mm = tile_side_mm + gap_mm
 
     g = load_grid()
     horiz = g['horiz']
     vert = g['vert']
+
+    tile_limit_debug = (8, 9)
+
     # Number of tiles
-    NUM_TILES_X = len(horiz[0]) - 1
-    NUM_TILES_Y = len(vert[0]) - 1
+    NUM_TILES_X = min(tile_limit_debug[0], len(horiz[0]) - 1)
+    NUM_TILES_Y = min(tile_limit_debug[1], len(vert[0]) - 1)
 
     print(f"{NUM_TILES_X=} {NUM_TILES_Y=}")
 
-    # Coordinate spaces:
+    # Note [Coordinate spaces]:
     #
     # * In the puzzle field, the top left corner is (0,0),
     #   downwards is +Y and right is +X.
@@ -52,19 +59,40 @@ def main():
     # Gaps
     for y, lane in enumerate(horiz):
         for x, gap_active in enumerate(lane):
-            if not gap_active:
+            if x >= tile_limit_debug[0]+1 or y >= tile_limit_debug[1]: break
+            if not gap_active:  # render gap
                 o = translate([y * tilegap_mm, x * tilegap_mm - gap_mm, 0])(
                         cube([tile_side_mm, gap_mm, tile_height_mm])
                     )
                 objects.append(o)
     for x, lane in enumerate(vert):
         for y, gap_active in enumerate(lane):
-            if not gap_active:
-                print(f"{x=} {y=}")
+            if x >= tile_limit_debug[0] or y >= tile_limit_debug[1]+1: break
+            if not gap_active:  # render gap
                 o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm, 0])(
                         cube([gap_mm, tile_side_mm, tile_height_mm])
                     )
                 objects.append(o)
+
+    # Frame
+    frame_hole_width_x = NUM_TILES_Y * tilegap_mm + gap_mm  # see note [Coordinate spaces]
+    frame_hole_width_y = NUM_TILES_X * tilegap_mm + gap_mm
+    frame_hole = translate([0,0,-eps])(cube([
+        frame_hole_width_x,
+        frame_hole_width_y,
+        tile_height_mm + 2*eps,
+    ]))
+    frame = cube([
+        frame_hole_width_x + 2*frame_margin_mm,
+        frame_hole_width_y + 2*frame_margin_mm,
+        tile_height_mm,
+    ]) - translate([frame_margin_mm, frame_margin_mm, 0])(frame_hole)
+    positioned_frame = translate([
+        -frame_margin_mm - gap_mm,
+        -frame_margin_mm - gap_mm,
+        0,
+    ])(frame)
+    objects.append(color([1,0,0])(positioned_frame))
 
     d = union()(
         *objects
