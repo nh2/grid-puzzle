@@ -18,10 +18,17 @@ def load_grid():
 
 def main():
 
-    tile_height_mm = 6.4
-    tile_side_mm = 6.4
-    gap_mm = 0.6
+    # Large size (requires 4 Ender 3 3D printer bed prints for the field without frame)
+    tile_height_mm = 6.0
+    tile_side_mm = 6.0
     frame_margin_mm = 5
+
+    # Small field size (just fits on Ender 3 3D printer bed):
+    # tile_height_mm = 3.6
+    # tile_side_mm = 3.6
+    # frame_margin_mm = 3.2
+
+    gap_mm = 0.5
 
     eps = 0.01  # OpenGL render tolerance for OpenSCAD visualisation
 
@@ -31,7 +38,8 @@ def main():
     horiz = g['horiz']
     vert = g['vert']
 
-    tile_limit_debug = (8, 9)
+    enable_tile_limit_debug = False
+    tile_limit_debug = (8, 8) if enable_tile_limit_debug else (10000, 10000)
 
     # Number of tiles
     NUM_TILES_X = min(tile_limit_debug[0], len(horiz[0]) - 1)
