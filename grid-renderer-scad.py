@@ -106,7 +106,7 @@ def main():
         -frame_margin_mm - gap_mm,
         0,
     ])(frame)
-    objects.append(color([1,0,0])(positioned_frame))
+    objects.append(color([1,0,0])(translate([0,0,-eps])(positioned_frame)))
 
     d = union()(
         *objects
