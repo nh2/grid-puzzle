@@ -56,7 +56,7 @@ def main():
                 )
             objects.append(o)
 
-    # Gaps
+    # Closed gaps
     for y, lane in enumerate(horiz):
         for x, gap_active in enumerate(lane):
             if x >= tile_limit_debug[0]+1 or y >= tile_limit_debug[1]: break
@@ -72,6 +72,20 @@ def main():
                 o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm, 0])(
                         cube([gap_mm, tile_side_mm, tile_height_mm])
                     )
+                objects.append(o)
+    # Gap corner hole fillers (small hole between 4 closed gaps)
+    for x in range(NUM_TILES_X + 1):
+        for y in range(NUM_TILES_Y + 1):
+            any_adjacent_gap_active = any([
+                (y != 0           and horiz[y-1][x  ]),  # Gap above
+                (y != NUM_TILES_Y and horiz[y  ][x  ]),  # Gap below
+                (x != 0           and vert [x-1][y  ]),  # Gap left
+                (x != NUM_TILES_X and vert [x  ][y  ]),  # Gap right
+            ])
+            o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm - gap_mm, 0])(
+                    cube([gap_mm, gap_mm, tile_height_mm])
+                )
+            if not any_adjacent_gap_active:
                 objects.append(o)
 
     # Frame
