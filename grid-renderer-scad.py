@@ -56,15 +56,16 @@ def main():
     #   We do that so that Y is up in openscad.
 
     # Tiles
-    objects = []
+    tile_objects = []
     for x in range(NUM_TILES_X):
         for y in range(NUM_TILES_Y):
             o = translate([y * tilegap_mm, x * tilegap_mm, 0])(
                     cube([tile_side_mm, tile_side_mm, tile_height_mm])
                 )
-            objects.append(o)
+            tile_objects.append(o)
 
     # Closed gaps
+    gap_objects = []
     for y, lane in enumerate(horiz):
         for x, gap_active in enumerate(lane):
             if x >= tile_limit_debug[0]+1 or y >= tile_limit_debug[1]: break
@@ -72,7 +73,7 @@ def main():
                 o = translate([y * tilegap_mm, x * tilegap_mm - gap_mm, 0])(
                         cube([tile_side_mm, gap_mm, tile_height_mm])
                     )
-                objects.append(o)
+                gap_objects.append(o)
     for x, lane in enumerate(vert):
         for y, gap_active in enumerate(lane):
             if x >= tile_limit_debug[0] or y >= tile_limit_debug[1]+1: break
@@ -80,8 +81,9 @@ def main():
                 o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm, 0])(
                         cube([gap_mm, tile_side_mm, tile_height_mm])
                     )
-                objects.append(o)
+                gap_objects.append(o)
     # Gap corner hole fillers (small hole between 4 closed gaps)
+    gap_corner_objects = []
     for x in range(NUM_TILES_X + 1):
         for y in range(NUM_TILES_Y + 1):
             any_adjacent_gap_active = any([
@@ -94,7 +96,7 @@ def main():
                     cube([gap_mm, gap_mm, tile_height_mm])
                 )
             if not any_adjacent_gap_active:
-                objects.append(o)
+                gap_corner_objects.append(o)
 
     # Frame
     frame_hole_width_x = NUM_TILES_Y * tilegap_mm + gap_mm  # see note [Coordinate spaces]
@@ -114,10 +116,15 @@ def main():
         -frame_margin_mm - gap_mm,
         0,
     ])(frame)
-    objects.append(color([1,0,0])(translate([0,0,-eps])(positioned_frame)))
+    positioned_frame_objects = [
+        color([1,0,0])(translate([0,0,-eps])(positioned_frame))
+    ]
 
     d = union()(
-        *objects
+        *tile_objects,
+        *gap_objects,
+        *gap_corner_objects,
+        *positioned_frame_objects,
     )
 
     scad_render_to_file(d, "puzzle.scad")
