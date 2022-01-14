@@ -7,34 +7,55 @@ from solid import *
 from solid.utils import *
 
 
-def load_grid():
-    save_file_path = 'field.json'
+def load_grid(save_file_path='field.json'):
     print(f"Loading {save_file_path}")
     with open(save_file_path, 'r') as f:
         state = json.load(f)
     return state
 
 
+@dataclass
+class GridSettings:
+    tile_height_mm: float
+    tile_side_mm: float
+    frame_margin_mm: float
 
-def main():
+    gap_mm: float
 
-    # Large size (requires 4 Ender 3 3D printer bed prints for the field without frame)
-    tile_height_mm = 6.0
-    tile_side_mm = 6.0
-    frame_margin_mm = 5
+    # OpenGL render tolerance for OpenSCAD visualisation
+    eps: float = 0.01
 
-    # Small field size (just fits on Ender 3 3D printer bed):
-    # tile_height_mm = 3.6
-    # tile_side_mm = 3.6
-    # frame_margin_mm = 3.2
 
-    gap_mm = 0.5
+# Large size (requires 4 Ender 3 3D printer bed prints for the field without frame)
+large_grid_settings = GridSettings(
+    tile_height_mm = 6.0,
+    tile_side_mm = 6.0,
+    frame_margin_mm = 5,
+    gap_mm = 0.5,
+)
 
-    eps = 0.01  # OpenGL render tolerance for OpenSCAD visualisation
+
+# Small field size (just fits on Ender 3 3D printer bed):
+small_grid_settings = GridSettings(
+    tile_height_mm = 3.6,
+    tile_side_mm = 3.6,
+    frame_margin_mm = 3.2,
+    gap_mm = 0.5,
+)
+
+
+def makeGridObject(grid_settings: GridSettings, field_file: str):
+
+    # Destructure grid settings
+    tile_height_mm = grid_settings.tile_height_mm
+    tile_side_mm = grid_settings.tile_side_mm
+    frame_margin_mm = grid_settings.frame_margin_mm
+    gap_mm = grid_settings.gap_mm
+    eps = grid_settings.eps
 
     tilegap_mm = tile_side_mm + gap_mm
 
-    g = load_grid()
+    g = load_grid(field_file)
     horiz = g['horiz']
     vert = g['vert']
 
@@ -98,6 +119,8 @@ def main():
             if not any_adjacent_gap_active:
                 gap_corner_objects.append(o)
 
+    eps = 0.02
+
     # Frame
     frame_hole_width_x = NUM_TILES_Y * tilegap_mm + gap_mm  # see note [Coordinate spaces]
     frame_hole_width_y = NUM_TILES_X * tilegap_mm + gap_mm
@@ -120,14 +143,19 @@ def main():
         color([1,0,0])(translate([0,0,-eps])(positioned_frame))
     ]
 
-    d = union()(
+    unioned = union()(
         *tile_objects,
         *gap_objects,
         *gap_corner_objects,
         *positioned_frame_objects,
     )
+    return unioned
 
-    scad_render_to_file(d, "puzzle.scad")
+
+def main():
+    g = makeGridObject(large_grid_settings, field_file='field.json')
+
+    scad_render_to_file(g, "puzzle.scad")
 
 
 if __name__ == '__main__':
