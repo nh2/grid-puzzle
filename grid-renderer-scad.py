@@ -1,5 +1,6 @@
 import json
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 # solidpython
@@ -79,6 +80,16 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
 
     print(f"{NUM_TILES_X=} {NUM_TILES_Y=}")
 
+    # Finds direct neighbors of a tile, no matter if connected or not (thus up to 4).
+    def direct_neighbor_tiles(tile):
+        x, y = tile
+        neighbors = []
+        if x > 0              : neighbors.append((x-1, y  ))
+        if x < NUM_TILES_X - 1: neighbors.append((x+1, y  ))
+        if y > 0              : neighbors.append((x,   y-1))
+        if y < NUM_TILES_Y - 1: neighbors.append((x,   y+1))
+        return neighbors
+
     # Finds direct neighbors of a tile, connected by closed cap (thus up to 4).
     def connected_direct_neighbor_tiles(tile):
         x, y = tile
@@ -127,6 +138,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
             stack += [n for n in neighbors if n not in visited_tiles]
         return piece
 
+    # Determine pieces by floodfilling.
     pieces = []  # list of tiles; each tile is a (x, y) coordinate
     for x in range(NUM_TILES_X):
         for y in range(NUM_TILES_Y):
@@ -143,6 +155,18 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
         for tile in piece
     }
 
+    # Find which pieces border each other.
+    bordering_pieces_map = defaultdict(set)  # map of `piece_id` to set of bordering piece IDs
+    for x in range(NUM_TILES_X):
+        for y in range(NUM_TILES_Y):
+            tile = (x, y)
+            piece_id = tile_to_piece_id_map[tile]
+            for n in direct_neighbor_tiles(tile):
+                neighbor_piece_id = tile_to_piece_id_map[n]
+                if neighbor_piece_id != piece_id:
+                    bordering_pieces_map[piece_id].add(neighbor_piece_id)
+                    bordering_pieces_map[neighbor_piece_id].add(piece_id)
+
     def rainbow_stop_rgb(h: float):  # input: [0, 1.0]; output: triple (r, g, b)
         # Inspired by http://blog.adamcole.ca/2011/11/simple-javascript-rainbow-color.html
         def f(n):
@@ -150,10 +174,33 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
             return .5 - .5 * max(min(k - 3, 9 - k, 1), -1)
         return (f(0), f(8), f(4))
 
+    # Coloring:
+    # Assign colors to pieces so that nearby pieces don't have similar colors.
+    piece_color_map = {}  # input: `piece_id`; output: triple (r, g, b)
+    # The "Four color theorem" states there's always a way to use only 4 colors,
+    # but finding the color assignment is O(n^2):
+    # * https://en.wikipedia.org/wiki/Four_color_theorem#Simplification_and_verification
+    # * https://thomas.math.gatech.edu/PAP/fcstoc.pdf
+    # So we make up new colors as necessary, to make it log-linear.
+    num_used_colors = 0
+    for piece_id, _ in enumerate(pieces):
+        bordering_colors = {piece_color_map.get(b) for b in bordering_pieces_map[piece_id]}
+        used_existing_color = False
+        for c in range(num_used_colors):
+            if c not in bordering_colors:
+                piece_color_map[piece_id] = c
+                used_existing_color = True
+                break
+        if not used_existing_color:
+            piece_color_map[piece_id] = num_used_colors
+            num_used_colors += 1
+
+    print(f"Colors needed for pieces: {num_used_colors}")
+
     def tile_piece_color(tile, o):
         piece_id = tile_to_piece_id_map[tile]
-        num_colors = 13  # modulo prime for pseudorandom color distribution
-        return color(list(rainbow_stop_rgb((piece_id % num_colors) / num_colors)))(o)
+        color_id = piece_color_map[piece_id]
+        return color(list(rainbow_stop_rgb(color_id / num_used_colors)))(o)
 
 
     # Note [Coordinate spaces]:
