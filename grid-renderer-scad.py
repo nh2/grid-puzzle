@@ -197,10 +197,12 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
 
     print(f"Colors needed for pieces: {num_used_colors}")
 
-    def tile_piece_color(tile, o):
-        piece_id = tile_to_piece_id_map[tile]
+    def piece_color(piece_id):
         color_id = piece_color_map[piece_id]
-        return color(list(rainbow_stop_rgb(color_id / num_used_colors)))(o)
+        return rainbow_stop_rgb(color_id / num_used_colors)
+
+    def tile_piece_color_object(tile, o):
+        return color(list(piece_color(tile_to_piece_id_map[tile])))(o)
 
 
     # Note [Coordinate spaces]:
@@ -211,17 +213,49 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
     #   downards is +X and right is +Y.
     #   We do that so that Y is up in openscad.
 
-    # Tiles
-    tile_objects = []
-    for x in range(NUM_TILES_X):
-        for y in range(NUM_TILES_Y):
+    # Generate SCAD objects for each piece
+    piece_tile_objects = []  # maps from piece_id to SCAD objects
+    for piece_id, tiles in enumerate(pieces):
+
+        # Tiles
+        tile_objects = []
+        for tile in tiles:
+            x, y = tile
             o = translate([y * tilegap_mm, x * tilegap_mm, 0])(
                     cube([tile_side_mm, tile_side_mm, tile_height_mm])
                 )
-            tile_objects.append(tile_piece_color((x,y), o))
+            tile_objects.append(tile_piece_color_object(tile, o))
+        piece_tile_objects.append(tile_objects)
+
+    # Helper functions to map gaps and gap corners to pieces:
+    #
+    # If a gap is closed, the tiles on either side of it belong to the same piece.
+    # So we can determine the piece_id that the closed gap belongs to
+    # from either side, except fro the first/last gap in the lane, since
+    # that has a tile on only one of the sides.
+    def piece_id_of_horiz_gap(x, y):
+        tile = (
+            x if x < NUM_TILES_X - 1 else x-1,
+            y,
+        )
+        return tile_to_piece_id_map[tile]
+    def piece_id_of_vert_gap(x, y):
+        tile = (
+            x,
+            y if y < NUM_TILES_Y - 1 else y-1,
+        )
+        return tile_to_piece_id_map[tile]
+    def piece_id_of_gap_corner(x, y):
+        tile = (
+            x if x < NUM_TILES_X - 1 else x-1,
+            y if y < NUM_TILES_Y - 1 else y-1,
+        )
+        return tile_to_piece_id_map[tile]
 
     # Closed gaps
+    # We need to add each closed gap to the piece it belongs to.
     gap_objects = []
+    piece_gap_objects = defaultdict(list)
     for y, lane in enumerate(horiz):
         for x, gap_active in enumerate(lane):
             if x >= tile_limit_debug[0]+1 or y >= tile_limit_debug[1]: break
@@ -229,7 +263,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
                 o = translate([y * tilegap_mm, x * tilegap_mm - gap_mm, 0])(
                         cube([tile_side_mm, gap_mm, tile_height_mm])
                     )
-                gap_objects.append(o)
+                piece_gap_objects[piece_id_of_horiz_gap(x, y)].append(o)
     for x, lane in enumerate(vert):
         for y, gap_active in enumerate(lane):
             if x >= tile_limit_debug[0] or y >= tile_limit_debug[1]+1: break
@@ -237,9 +271,9 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
                 o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm, 0])(
                         cube([gap_mm, tile_side_mm, tile_height_mm])
                     )
-                gap_objects.append(o)
+                piece_gap_objects[piece_id_of_vert_gap(x, y)].append(o)
     # Gap corner hole fillers (small hole between 4 closed gaps)
-    gap_corner_objects = []
+    piece_gap_corner_objects = defaultdict(list)
     for x in range(NUM_TILES_X + 1):
         for y in range(NUM_TILES_Y + 1):
             any_adjacent_gap_active = any([
@@ -248,11 +282,23 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
                 (x != 0           and vert [x-1][y  ]),  # Gap left
                 (x != NUM_TILES_X and vert [x  ][y  ]),  # Gap right
             ])
-            o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm - gap_mm, 0])(
-                    cube([gap_mm, gap_mm, tile_height_mm])
-                )
             if not any_adjacent_gap_active:
-                gap_corner_objects.append(o)
+                o = translate([y * tilegap_mm - gap_mm, x * tilegap_mm - gap_mm, 0])(
+                        cube([gap_mm, gap_mm, tile_height_mm])
+                    )
+                piece_gap_corner_objects[piece_id_of_gap_corner(x, y)].append(o)
+
+    # Add non-tile SCAD objects to the piece SCAD objects,
+    # unioned together by what they are so we can more easily colorize
+    # them different for debugging.
+    piece_objects = []
+    for piece_id, _ in enumerate(pieces):
+        piece_object = union()(
+            *piece_tile_objects[piece_id],
+            *piece_gap_objects[piece_id],
+            *piece_gap_corner_objects[piece_id],
+        )
+        piece_objects.append(color(list(piece_color(piece_id)))(piece_object))
 
     eps = 0.02
 
@@ -279,9 +325,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
     ]
 
     unioned = union()(
-        *tile_objects,
-        *gap_objects,
-        *gap_corner_objects,
+        *(piece_objects),
         *(positioned_frame_objects if grid_settings.add_frame else []),
     )
     return Grid(
