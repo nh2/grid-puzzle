@@ -19,6 +19,11 @@ class InputState:
     gap: Gap
 
 
+# Whether the editor starts with tiles all-connected (False)
+# or all-disconnected (True).
+GAP_ACTIVE_BY_DEFAULT = True
+
+
 class GridWindow(Gtk.Window):
     def __init__(self):
 
@@ -91,7 +96,8 @@ class GridWindow(Gtk.Window):
             button = Gtk.Button(label=label)
             button.set_relief(Gtk.ReliefStyle.NONE)
             button.get_style_context().add_class("field")
-            button.get_style_context().add_class("disabled")
+            if not GAP_ACTIVE_BY_DEFAULT:
+                button.get_style_context().add_class("disabled")
             button.get_style_context().add_class(css_class)
             grid.attach(button, left=left, top=top, width=width, height=height)
             return button
@@ -144,7 +150,7 @@ class GridWindow(Gtk.Window):
                 top = lane * 2 + 1
                 b = add_button(3*top, 3*left, "", "gap", height=3)
                 buttons_gaps_horiz[(lane, offset)] = b
-                gaps_horiz[(lane, offset)] = False
+                gaps_horiz[(lane, offset)] = GAP_ACTIVE_BY_DEFAULT
                 b.connect("clicked", make_gap_clicked_function(Gap("h", lane, offset)))
                 b.connect("key-press-event", make_keypress_function())
 
@@ -162,7 +168,7 @@ class GridWindow(Gtk.Window):
                 top = offset * 2
                 b = add_button(3*top, 3*left, "", "gap", width=3)
                 buttons_gaps_vert[(lane, offset)] = b
-                gaps_vert[(lane, offset)] = False
+                gaps_vert[(lane, offset)] = GAP_ACTIVE_BY_DEFAULT
                 b.connect("clicked", make_gap_clicked_function(Gap("v", lane, offset)))
                 b.connect("key-press-event", make_keypress_function())
 
@@ -203,7 +209,7 @@ class GridWindow(Gtk.Window):
                 for lane, cols in enumerate(bools):
                     for offset, b in enumerate(cols):
                         direction = {'horiz': 'h', 'vert': 'v'}[key]
-                        gap = Gap(direction=direction, lane=lane+1, offset=offset+1)
+                        gap = Gap(direction=direction, lane=lane, offset=offset)
                         set_gap(gap, gap_active=b)
                         print(f"Loading {gap=} {b=}")
 
