@@ -19,11 +19,8 @@ def load_grid(save_file_path='field.json'):
 class GridSettings:
     tile_height_mm: float
     tile_side_mm: float
-    frame_margin_mm: float
 
     gap_mm: float
-
-    add_frame: bool
 
     # OpenGL render tolerance for OpenSCAD visualisation
     eps: float = 0.01
@@ -33,9 +30,7 @@ class GridSettings:
 large_grid_settings = GridSettings(
     tile_height_mm = 6.0,
     tile_side_mm = 6.0,
-    frame_margin_mm = 5,
     gap_mm = 0.5,
-    add_frame = True,
 )
 
 
@@ -43,9 +38,7 @@ large_grid_settings = GridSettings(
 small_grid_settings = GridSettings(
     tile_height_mm = 3.6,
     tile_side_mm = 3.6,
-    frame_margin_mm = 3.2,
     gap_mm = 0.5,
-    add_frame = True,
 )
 
 
@@ -61,7 +54,6 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
     # Destructure grid settings
     tile_height_mm = grid_settings.tile_height_mm
     tile_side_mm = grid_settings.tile_side_mm
-    frame_margin_mm = grid_settings.frame_margin_mm
     gap_mm = grid_settings.gap_mm
     eps = grid_settings.eps
 
@@ -110,7 +102,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
     # * a tile and a gap if and only if the corresponding field gap is active;
     # * a gap and a corner if and only if the corresponding field gap is active.
     # Computing connected components on this computes the puzzle pieces,
-    # and the frame piece.
+    # including the frame piece.
     # Equivalently, and simpler (which we do here):
     #
     # Floodfill:
@@ -300,33 +292,8 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
         )
         piece_objects.append(color(list(piece_color(piece_id)))(piece_object))
 
-    eps = 0.02
-
-    # Frame
-    frame_hole_width_x = NUM_TILES_Y * tilegap_mm + gap_mm  # see note [Coordinate spaces]
-    frame_hole_width_y = NUM_TILES_X * tilegap_mm + gap_mm
-    frame_hole = translate([0,0,-eps])(cube([
-        frame_hole_width_x,
-        frame_hole_width_y,
-        tile_height_mm + 2*eps,
-    ]))
-    frame = cube([
-        frame_hole_width_x + 2*frame_margin_mm,
-        frame_hole_width_y + 2*frame_margin_mm,
-        tile_height_mm,
-    ]) - translate([frame_margin_mm, frame_margin_mm, 0])(frame_hole)
-    positioned_frame = translate([
-        -frame_margin_mm - gap_mm,
-        -frame_margin_mm - gap_mm,
-        0,
-    ])(frame)
-    positioned_frame_objects = [
-        color([1,0,0])(translate([0,0,-eps])(positioned_frame))
-    ]
-
     unioned = union()(
         *(piece_objects),
-        *(positioned_frame_objects if grid_settings.add_frame else []),
     )
     return Grid(
         scad_object=unioned,
@@ -339,38 +306,14 @@ def main():
     grid_settings = large_grid_settings
     # grid_settings = small_grid_settings
 
-    puzzle_grid = makeGrid(grid_settings, field_file='field.json')
-
-    # Scale frame bottom, because because it is designed without
-    # frame and we cannot add a frame because then the bottom would
-    # not be separate pieces as desired.
-    # It's not great, perhaps I should rather have designed it so that
-    # the frame is part of the puzzle already in the puzzle editor.
-    puzzle_width_without_frame_x = (
-        puzzle_grid.num_tiles_x * grid_settings.tile_side_mm
-        +
-        (puzzle_grid.num_tiles_x + 1) * grid_settings.gap_mm
-    )
-    puzzle_width_without_frame_y = (
-        puzzle_grid.num_tiles_y * grid_settings.tile_side_mm
-        +
-        (puzzle_grid.num_tiles_y + 1) * grid_settings.gap_mm
-    )
-    puzzle_width_with_frame_x = puzzle_width_without_frame_x + 2 * grid_settings.frame_margin_mm
-    puzzle_width_with_frame_y = puzzle_width_without_frame_y + 2 * grid_settings.frame_margin_mm
-    frame_scale_x = puzzle_width_with_frame_x / puzzle_width_without_frame_x
-    frame_scale_y = puzzle_width_with_frame_y / puzzle_width_without_frame_y
+    puzzle_grid = makeGrid(grid_settings, field_file='fields/field-manual-3-custom-5-complete-th-with-frame.json')
 
     frame_grid_settings = grid_settings
     frame_grid_settings.add_frame = False
     frame_grid = makeGrid(frame_grid_settings, field_file='fields/field-frame-lower.json')
     frame = color([0,1,0])(
         translate([0,0,-frame_grid_settings.tile_height_mm])(
-            translate([-frame_grid_settings.frame_margin_mm, -frame_grid_settings.frame_margin_mm, 0])(
-                scale([frame_scale_y, frame_scale_y, 1])(
-                    frame_grid.scad_object
-                )
-            )
+            frame_grid.scad_object
         )
     )
 
