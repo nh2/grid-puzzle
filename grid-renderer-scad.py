@@ -22,6 +22,8 @@ class GridSettings:
 
     gap_mm: float
 
+    add_frame: bool
+
     # OpenGL render tolerance for OpenSCAD visualisation
     eps: float = 0.01
 
@@ -32,6 +34,7 @@ large_grid_settings = GridSettings(
     tile_side_mm = 6.0,
     frame_margin_mm = 5,
     gap_mm = 0.5,
+    add_frame = True,
 )
 
 
@@ -41,10 +44,18 @@ small_grid_settings = GridSettings(
     tile_side_mm = 3.6,
     frame_margin_mm = 3.2,
     gap_mm = 0.5,
+    add_frame = True,
 )
 
 
-def makeGridObject(grid_settings: GridSettings, field_file: str):
+@dataclass
+class Grid:
+    scad_object: object
+    num_tiles_x: int
+    num_tiles_y: int
+
+
+def makeGrid(grid_settings: GridSettings, field_file: str):
 
     # Destructure grid settings
     tile_height_mm = grid_settings.tile_height_mm
@@ -147,15 +158,60 @@ def makeGridObject(grid_settings: GridSettings, field_file: str):
         *tile_objects,
         *gap_objects,
         *gap_corner_objects,
-        *positioned_frame_objects,
+        *(positioned_frame_objects if grid_settings.add_frame else []),
     )
-    return unioned
+    return Grid(
+        scad_object=unioned,
+        num_tiles_x=NUM_TILES_X,
+        num_tiles_y=NUM_TILES_Y,
+    )
 
 
 def main():
-    g = makeGridObject(large_grid_settings, field_file='field.json')
+    grid_settings = large_grid_settings
+    # grid_settings = small_grid_settings
 
-    scad_render_to_file(g, "puzzle.scad")
+    puzzle_grid = makeGrid(grid_settings, field_file='field.json')
+
+    # Scale frame bottom, because because it is designed without
+    # frame and we cannot add a frame because then the bottom would
+    # not be separate pieces as desired.
+    # It's not great, perhaps I should rather have designed it so that
+    # the frame is part of the puzzle already in the puzzle editor.
+    puzzle_width_without_frame_x = (
+        puzzle_grid.num_tiles_x * grid_settings.tile_side_mm
+        +
+        (puzzle_grid.num_tiles_x + 1) * grid_settings.gap_mm
+    )
+    puzzle_width_without_frame_y = (
+        puzzle_grid.num_tiles_y * grid_settings.tile_side_mm
+        +
+        (puzzle_grid.num_tiles_y + 1) * grid_settings.gap_mm
+    )
+    puzzle_width_with_frame_x = puzzle_width_without_frame_x + 2 * grid_settings.frame_margin_mm
+    puzzle_width_with_frame_y = puzzle_width_without_frame_y + 2 * grid_settings.frame_margin_mm
+    frame_scale_x = puzzle_width_with_frame_x / puzzle_width_without_frame_x
+    frame_scale_y = puzzle_width_with_frame_y / puzzle_width_without_frame_y
+
+    frame_grid_settings = grid_settings
+    frame_grid_settings.add_frame = False
+    frame_grid = makeGrid(frame_grid_settings, field_file='fields/field-frame-lower.json')
+    frame = color([0,1,0])(
+        translate([0,0,-frame_grid_settings.tile_height_mm])(
+            translate([-frame_grid_settings.frame_margin_mm, -frame_grid_settings.frame_margin_mm, 0])(
+                scale([frame_scale_y, frame_scale_y, 1])(
+                    frame_grid.scad_object
+                )
+            )
+        )
+    )
+
+    puzzle_with_frame = union()(
+        puzzle_grid.scad_object,
+        frame,
+    )
+
+    scad_render_to_file(puzzle_with_frame, "puzzle.scad")
 
 
 if __name__ == '__main__':
