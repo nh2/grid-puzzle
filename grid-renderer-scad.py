@@ -79,6 +79,64 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
 
     print(f"{NUM_TILES_X=} {NUM_TILES_Y=}")
 
+    # Connected components algorithm:
+    # We need to know which tiles are connected together in a "piece"
+    # (including which gaps and corners belong to them) such that we
+    # can e.g. give each piece a separate colour.
+    # Conceptually, the field is an undirected graph, in which
+    # {tiles, gaps, corners} all are nodes, and an edge exists between:
+    # * a tile and a gap if and only if the corresponding field gap is active;
+    # * a gap and a corner if and only if the corresponding field gap is active.
+    # Computing connected components on this computes the puzzle pieces,
+    # and the frame piece.
+    # Equivalently, and simpler (which we do here):
+    #
+    # Floodfill:
+    #
+    # Keep a stack or queue of tiles to visit next,
+    # and remember for each tile if it was already visited.
+    # Iterate over all tiles.
+    # * If the tile was already visited, skip it.
+    # * Otherwise, create a new piece stack; add the tile to it.
+    #   While the stack isn't empty:
+    #     * Pop a tile from it; mark it as visited.
+    #       Find all direct neighbor tiles connected by a closed gap;
+    #       add those to the stack.
+    #   All tiles that were added to (and thus popped from) the stack
+    #   constitute a puzzle piece.
+    visited_tiles = set()  # set of tiles; each tile is a (x, y) coordinate
+    def floodfill_piece_from(start_tile):
+        piece = []  # list of tiles
+        stack = [start_tile]
+        while len(stack) > 0:
+            tile = (x, y) = stack.pop()
+            visited_tiles.add(tile)
+            piece.append(tile)
+            neighbors = []
+            #                      not (gap_active?)
+            if x > 0               and not horiz[y][x  ]: neighbors.append((x-1, y  ))
+            if x < NUM_TILES_X - 1 and not horiz[y][x+1]: neighbors.append((x+1, y  ))
+            if y > 0               and not vert [x][y  ]: neighbors.append((x,   y-1))
+            if y < NUM_TILES_Y - 1 and not vert [x][y+1]: neighbors.append((x,   y+1))
+            stack += [n for n in neighbors if n not in visited_tiles]
+        return piece
+
+    pieces = []  # list of tiles; each tile is a (x, y) coordinate
+    for x in range(NUM_TILES_X):
+        for y in range(NUM_TILES_Y):
+            tile = (x, y)
+            if tile not in visited_tiles:
+                piece = floodfill_piece_from(tile)
+                pieces.append(piece)
+
+    print(f"Num pieces: {len(pieces)}")
+
+    tile_to_piece_id_map = {
+        tile: piece_id
+        for piece_id, piece in enumerate(pieces)
+        for tile in piece
+    }
+
     # Note [Coordinate spaces]:
     #
     # * In the puzzle field, the top left corner is (0,0),
