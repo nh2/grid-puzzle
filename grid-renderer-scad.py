@@ -79,6 +79,17 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
 
     print(f"{NUM_TILES_X=} {NUM_TILES_Y=}")
 
+    # Finds direct neighbors of a tile, connected by closed cap (thus up to 4).
+    def connected_direct_neighbor_tiles(tile):
+        x, y = tile
+        neighbors = []
+        #                      not (gap_active?)
+        if x > 0               and not horiz[y][x  ]: neighbors.append((x-1, y  ))
+        if x < NUM_TILES_X - 1 and not horiz[y][x+1]: neighbors.append((x+1, y  ))
+        if y > 0               and not vert [x][y  ]: neighbors.append((x,   y-1))
+        if y < NUM_TILES_Y - 1 and not vert [x][y+1]: neighbors.append((x,   y+1))
+        return neighbors
+
     # Connected components algorithm:
     # We need to know which tiles are connected together in a "piece"
     # (including which gaps and corners belong to them) such that we
@@ -109,15 +120,10 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
         piece = []  # list of tiles
         stack = [start_tile]
         while len(stack) > 0:
-            tile = (x, y) = stack.pop()
+            tile = stack.pop()
             visited_tiles.add(tile)
             piece.append(tile)
-            neighbors = []
-            #                      not (gap_active?)
-            if x > 0               and not horiz[y][x  ]: neighbors.append((x-1, y  ))
-            if x < NUM_TILES_X - 1 and not horiz[y][x+1]: neighbors.append((x+1, y  ))
-            if y > 0               and not vert [x][y  ]: neighbors.append((x,   y-1))
-            if y < NUM_TILES_Y - 1 and not vert [x][y+1]: neighbors.append((x,   y+1))
+            neighbors = connected_direct_neighbor_tiles(tile)
             stack += [n for n in neighbors if n not in visited_tiles]
         return piece
 
