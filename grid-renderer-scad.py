@@ -137,6 +137,19 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
         for tile in piece
     }
 
+    def rainbow_stop_rgb(h: float):  # input: [0, 1.0]; output: triple (r, g, b)
+        # Inspired by http://blog.adamcole.ca/2011/11/simple-javascript-rainbow-color.html
+        def f(n):
+            k = (n + h * 12) % 12
+            return .5 - .5 * max(min(k - 3, 9 - k, 1), -1)
+        return (f(0), f(8), f(4))
+
+    def tile_piece_color(tile, o):
+        piece_id = tile_to_piece_id_map[tile]
+        num_colors = 13  # modulo prime for pseudorandom color distribution
+        return color(list(rainbow_stop_rgb((piece_id % num_colors) / num_colors)))(o)
+
+
     # Note [Coordinate spaces]:
     #
     # * In the puzzle field, the top left corner is (0,0),
@@ -152,7 +165,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
             o = translate([y * tilegap_mm, x * tilegap_mm, 0])(
                     cube([tile_side_mm, tile_side_mm, tile_height_mm])
                 )
-            tile_objects.append(o)
+            tile_objects.append(tile_piece_color((x,y), o))
 
     # Closed gaps
     gap_objects = []
