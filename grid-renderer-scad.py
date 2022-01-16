@@ -44,7 +44,8 @@ small_grid_settings = GridSettings(
 
 @dataclass
 class Grid:
-    scad_object: object
+    piece_objects: [object]  # all connected pieces as SCAD objects
+    tile_to_piece_id_map: dict
     num_tiles_x: int
     num_tiles_y: int
 
@@ -292,14 +293,16 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
         )
         piece_objects.append(color(list(piece_color(piece_id)))(piece_object))
 
-    unioned = union()(
-        *(piece_objects),
-    )
     return Grid(
-        scad_object=unioned,
+        piece_objects=piece_objects,
+        tile_to_piece_id_map=tile_to_piece_id_map,
         num_tiles_x=NUM_TILES_X,
         num_tiles_y=NUM_TILES_Y,
     )
+
+
+def dict_key_with_max_value(d):
+    return max(d, key=d.get)
 
 
 def main():
@@ -308,19 +311,109 @@ def main():
 
     puzzle_grid = makeGrid(grid_settings, field_file='fields/field-manual-3-custom-5-complete-th-with-frame.json')
 
-    frame_grid_settings = grid_settings
-    frame_grid_settings.add_frame = False
-    frame_grid = makeGrid(frame_grid_settings, field_file='fields/field-frame-lower.json')
-    frame = color([0,1,0])(
-        translate([0,0,-frame_grid_settings.tile_height_mm])(
-            frame_grid.scad_object
-        )
-    )
+    if len(puzzle_grid.piece_objects) == 0:
+        raise Exception("Empty puzzle objects")
 
-    puzzle_with_frame = union()(
-        puzzle_grid.scad_object,
-        frame,
-    )
+    lower_frame_grid_settings = grid_settings
+    lower_frame_grid_settings.add_frame = False
+    lower_frame_grid = makeGrid(lower_frame_grid_settings, field_file='fields/field-frame-lower.json')
+
+    # If enabled, don't join upper and lower frame parts into joint SCAD objects.
+    # That is for a simpler rendering/debugging.
+    SEPARATE_LAYER_OBJECTS = False
+
+    puzzle_with_frame = None  # both `if` branches assign this
+
+    if SEPARATE_LAYER_OBJECTS:
+        frame = color([0,1,0])(
+            translate([0,0,-lower_frame_grid_settings.tile_height_mm])(
+                union()(
+                    *lower_frame_grid.piece_objects,
+                )
+            )
+        )
+
+        puzzle_with_frame = union()(
+            *puzzle_grid.piece_objects,
+            frame,
+        )
+    else:
+        # Find the pieces in the puzzle that constitute the upper frame,
+        # that is, all pieces in which an outermost tile partitipates.
+        # For each one find the corresponding lower frame piece with the
+        # most overlap in outermost tiles.
+
+        nx, ny = puzzle_grid.num_tiles_x, puzzle_grid.num_tiles_y
+        # Find outermost tiles.
+        outermost_tiles = [
+            *[(x     , 0     ) for x in range(0, nx)],
+            *[(x     , ny - 1) for x in range(0, nx)],
+            *[(0     , y     ) for y in range(0, ny)],
+            *[(nx - 1, y     ) for y in range(0, ny)],
+        ]
+
+        # Find upper frame pieces.
+        upper_frame_pieces_with_tiles = defaultdict(list)  # map from `piece_id` to [tile]
+        for tile in outermost_tiles:
+            upper_piece_id = puzzle_grid.tile_to_piece_id_map[tile]
+            upper_frame_pieces_with_tiles[upper_piece_id].append(tile)
+
+        # For each upper frame piece, find highest-overlap lower frame piece.
+        best_lower_piece_for_upper_piece = {}  # map from upper `piece_id` to lower `piece_id`
+        for upper_piece_id, tiles in upper_frame_pieces_with_tiles.items():
+            lower_frame_piece_overlap_counter = defaultdict(int)  # map from `piece_id` to `int`
+            for tile in tiles:
+                lower_piece_id = lower_frame_grid.tile_to_piece_id_map.get(tile)
+                if lower_piece_id is not None:
+                    lower_frame_piece_overlap_counter[lower_piece_id] += 1
+            best_lower_piece_id = dict_key_with_max_value(lower_frame_piece_overlap_counter)
+            best_lower_piece_for_upper_piece[upper_piece_id] = best_lower_piece_id
+
+        # Moves a SCAD object to the lower frame's plane.
+        def translate_to_lower(o):
+            return translate([0, 0, -(grid_settings.tile_height_mm)])(o)
+
+        # Get the SCAD puzzle piece objects that don't belong to the frame.
+        puzzle_non_frame_objects = {  # map from `piece_id` to SCAD object
+            i: o
+            for i, o in enumerate(puzzle_grid.piece_objects)
+            if i not in best_lower_piece_for_upper_piece
+        }
+        # Get the lower frame piece objects that don't belong to the circumference.
+        lower_frame_non_circumference_objects = {  # map from `piece_id` to SCAD object
+            i: translate_to_lower(o)
+            for i, o in enumerate(lower_frame_grid.piece_objects)
+            if i not in best_lower_piece_for_upper_piece.values()
+        }
+
+        # Create gap between puzzle and lower frame.
+        frame_gap_vertical_mm = 1
+
+        # Join the matching pieces as SCAD objects.
+        joint_frame_objects = {  # map from `piece_id` to SCAD object
+            upper_piece_id: union()(
+                puzzle_grid.piece_objects[upper_piece_id],
+                translate_to_lower(
+                    lower_frame_grid.piece_objects[lower_piece_id],
+                ),
+            )
+            for upper_piece_id, lower_piece_id in best_lower_piece_for_upper_piece.items()
+        }
+
+        all_objects = [  # ordered highest to lowest in the explosion rendering, if enabled below
+            *puzzle_non_frame_objects.values(),
+            *joint_frame_objects.values(),
+            *lower_frame_non_circumference_objects.values(),
+        ]
+
+        # If true, render the objects vertically offset like an explosion diagram.
+        EXPLODE = False
+
+        puzzle_with_frame = union()(
+            *(all_objects if not EXPLODE else
+                [translate([0, 0, i])(obj) for i, obj in enumerate(reversed(all_objects))]
+            )
+        )
 
     scad_render_to_file(puzzle_with_frame, "puzzle.scad")
 
