@@ -217,7 +217,7 @@ def makeGrid(grid_settings: GridSettings, field_file: str):
             o = translate([y * tilegap_mm, x * tilegap_mm, 0])(
                     cube([tile_side_mm, tile_side_mm, tile_height_mm])
                 )
-            tile_objects.append(tile_piece_color_object(tile, o))
+            tile_objects.append(o)
         piece_tile_objects.append(tile_objects)
 
     # Helper functions to map gaps and gap corners to pieces:
