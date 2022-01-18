@@ -1,7 +1,10 @@
+import argparse
 import json
+import subprocess
 
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
 # solidpython
 from solid import *
@@ -306,6 +309,15 @@ def dict_key_with_max_value(d):
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Renders puzzle field to OpenSCAD output for 3D printing.')
+    parser.add_argument('--generate-scad-pieces', dest='generate_scad_pieces', action='store_true', help='Render each puzzle piece separately into an OpenSCAD .scad file in the gen/ dir.')
+    parser.add_argument('--generate-stl-pieces', dest='generate_stl_pieces', action='store_true', help='Render each puzzle piece separately into .stl by invoking OpenSCAD on it.')
+
+    args = parser.parse_args()
+
+    generate_scad_pieces = args.generate_scad_pieces or args.generate_stl_pieces
+    generate_stl_pieces = args.generate_stl_pieces
+
     grid_settings = large_grid_settings
     # grid_settings = small_grid_settings
 
@@ -414,6 +426,50 @@ def main():
                 [translate([0, 0, i])(obj) for i, obj in enumerate(reversed(all_objects))]
             )
         )
+
+        # Render SCAD objects to individual files for parallel processing
+        # and separate printing.
+        if generate_scad_pieces:
+            print("Generating .scad files...")
+
+            all_scad_paths = []
+            gen_dir = Path("gen")
+            gen_dir.mkdir(exist_ok=True)
+
+            def write_scad_file(obj, path: Path):
+                scad_render_to_file(obj, str(path))
+                all_scad_paths.append(path)
+
+            scad_dir = gen_dir / "scad"
+            scad_dir.mkdir(exist_ok=True)
+
+            # Frame parts separately
+            joint_frame_dir = scad_dir / "joint-frame"
+            joint_frame_dir.mkdir(exist_ok=True)
+            frame_items = list(joint_frame_objects.items()) + list(lower_frame_non_circumference_objects.items())
+            for piece_id, o in frame_items:
+                write_scad_file(o, joint_frame_dir / f"joint-frame-{piece_id}.scad")
+            # All pieces separetly
+            puzzle_pieces_dir = scad_dir / "puzzle-pieces"
+            puzzle_pieces_dir.mkdir(exist_ok=True)
+            for piece_id, o in puzzle_non_frame_objects.items():
+                write_scad_file(o, puzzle_pieces_dir / f"puzzle-piece-{piece_id}.scad")
+            # All pieces together
+            write_scad_file(union()(*puzzle_non_frame_objects.values()), scad_dir / "puzzle-pieces.scad")
+
+            # Render all to STL using OpenSCAD.
+            if generate_stl_pieces:
+                print("Generating .stl files by invoking OpenSCAD...")
+                stl_dir = gen_dir / "stl"
+                stl_dir.mkdir(exist_ok=True)
+                # TODO: Parallelism
+                for scad_path in all_scad_paths:
+                    stl_out_path = stl_dir / scad_path.relative_to(scad_dir).with_suffix(".stl")
+                    print(f"{scad_path} -> {stl_out_path}")
+                    stl_out_path.parent.mkdir(parents=True, exist_ok=True)
+                    # `openscad` render invocation.
+                    subprocess.check_call(["openscad", str(scad_path), "-o", str(stl_out_path)])
+
 
     scad_render_to_file(puzzle_with_frame, "puzzle.scad")
 
